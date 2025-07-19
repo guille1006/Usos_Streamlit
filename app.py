@@ -4,6 +4,9 @@ import pydeck as pdk
 
 import matplotlib.pyplot as plt
 
+import numpy as np
+import io
+
 # Normalizador entre 0 y 10000
 norm = plt.Normalize(vmin=0, vmax=100)
 
@@ -14,7 +17,23 @@ cmap = plt.cm.plasma
 valor = 60
 color = cmap(norm(valor))  # Devuelve una tupla (r, g, b, a)
 
-def color_normalizado(v_max, )
+def mostrar_colorbar(vmin, vmax, cmap):
+    fig, ax = plt.subplots(figsize=(1, 5))
+    norm = plt.Normalize(vmin=vmin, vmax=vmax)
+    cb = plt.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), cax=ax)
+    cb.set_label("Numero de vuelos")
+    
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png", bbox_inches='tight', transparent=True)
+    buf.seek(0)
+    st.image(buf, caption="Escala de colores", use_column_width=False)
+
+# Llamar en Streamlit
+mostrar_colorbar(vmin=0, vmax=100, cmap=plt.cm.plasma)
+
+def color_normalizado(v_max):
+    norm = plt.Normalize(v_min=1, vmax=v_max)
+    cmap = plt.cm.plasma    
 
 
 # Simulación de tus datos de rutas
@@ -33,22 +52,13 @@ arc_layer = pdk.Layer(
     get_target_position='[to_lon, to_lat]',
     get_source_color="color",
     get_target_color="color",
-    get_width="width",
     pickable=True
 )
 
-# Vista del mapa
-view_state = pdk.ViewState(
-    latitude=df["from_lat"].mean(),
-    longitude=df["from_lon"].mean(),
-    zoom=1.5,
-    pitch=0
-)
 
 # Mostrar en Streamlit
 st.pydeck_chart(pdk.Deck(
     layers=[arc_layer],
-    initial_view_state=view_state,
     tooltip={"text": "Vuelo"}
 ))
 
