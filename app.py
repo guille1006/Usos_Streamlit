@@ -5,35 +5,36 @@ import pydeck as pdk
 import matplotlib.pyplot as plt
 
 import numpy as np
-import io
 
-# Normalizador entre 0 y 10000
-norm = plt.Normalize(vmin=0, vmax=100)
+col1, col2, col3= st.columns([15, 60, 10])
 
-# Colormap (ej: viridis, plasma, inferno, etc.)
-cmap = plt.cm.plasma
+v_max=100
+cmap_type ="hot"
 
-# Ejemplo: convertir un valor a color RGB
-valor = 60
-color = cmap(norm(valor))  # Devuelve una tupla (r, g, b, a)
 
-def mostrar_colorbar(vmin, vmax, cmap):
-    fig, ax = plt.subplots(figsize=(1, 5))
-    norm = plt.Normalize(vmin=vmin, vmax=vmax)
-    cb = plt.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), cax=ax)
-    cb.set_label("Numero de vuelos")
+def get_color_function(v_max, cmap_type, v_min=1):
+    """
+    Devuelve una función que convierte un valor en un color según el cmap y la normalización.
     
-    buf = io.BytesIO()
-    plt.savefig(buf, format="png", bbox_inches='tight', transparent=True)
-    buf.seek(0)
-    st.image(buf, caption="Escala de colores", use_column_width=False)
+    Parámetros:
+    - v_max: valor máximo para normalización
+    - cmap_type: nombre del colormap (default 'plasma')
+    - v_min: valor mínimo para normalización (default 1)
+    
+    Retorna:
+    - func_color(valor): función que recibe un valor y devuelve el color RGBA (0-1) y RGB255
+    """
+    norm = plt.Normalize(vmin=v_min, vmax=v_max)
+    cmap = plt.get_cmap(cmap_type)
+    
+    def func_color(valor):
+        color_rgba = cmap(norm(valor))  # color RGBA normalizado 0-1
+        color_rgb255 = [int(255*c) for c in color_rgba[:3]]  # color RGB 0-255
+        return color_rgb255
+    
+    return func_color
 
-# Llamar en Streamlit
-mostrar_colorbar(vmin=0, vmax=100, cmap=plt.cm.plasma)
-
-def color_normalizado(v_max):
-    norm = plt.Normalize(v_min=1, vmax=v_max)
-    cmap = plt.cm.plasma    
+color_func = get_color_function(v_max=v_max, cmap_type=cmap_type)
 
 
 # Simulación de tus datos de rutas
@@ -41,7 +42,7 @@ df = pd.DataFrame([
     {"from_lat": 40.4168, "from_lon": -3.7038, "to_lat": 48.8566, "to_lon": 2.3522, "width":30},  # Madrid → París
     {"from_lat": 51.5074, "from_lon": -0.1278, "to_lat": 40.7128, "to_lon": -74.0060, "width": 1}, # Londres → NYC
 ])
-df["color"] = df["width"].apply(lambda x: [int(c*255) for c in cmap(norm(x))[:3]])
+df["color"] = df["width"].apply(color_func)
 
 
 # Capa de arcos
@@ -57,11 +58,25 @@ arc_layer = pdk.Layer(
 
 
 # Mostrar en Streamlit
-st.pydeck_chart(pdk.Deck(
-    layers=[arc_layer],
-    tooltip={"text": "Vuelo"}
-))
+with col2:
+    st.pydeck_chart(pdk.Deck(
+        layers=[arc_layer],
+        tooltip={"text": "Vuelo"},
+        height=400
+    ))
 
 
+
+def mostrar_colorbar(vmin, vmax, cmap):
+    fig, ax = plt.subplots(figsize=(0.10, 4))
+    norm = plt.Normalize(vmin=vmin, vmax=vmax)
+    cb = plt.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), cax=ax)
+    cb.set_label("Numero de vuelos")
+    
+    with col3:
+        st.pyplot(fig, use_container_width=True)
+
+# Llamar en Streamlit
+mostrar_colorbar(vmin=0, vmax=v_max, cmap=cmap_type)
 
 
