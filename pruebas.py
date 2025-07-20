@@ -46,7 +46,6 @@ def load_data():
 
     return df_airports, df_airlines, df_routes
 
-
 def unir_pos_geografica(df, columns=["Source airport", "Destination airport"]):
     combinaciones = list(itertools.product(["Latitude", "Longitude"], columns))
     for eje, posicion in combinaciones:
@@ -60,7 +59,6 @@ def unir_pos_geografica(df, columns=["Source airport", "Destination airport"]):
         df.rename(columns={eje: f"{posicion.split()[0]} {eje}"}, inplace=True)
         df.drop(columns=["IATA"], inplace=True)
     return df 
-
 
 def num_vuelos_ida_vuelta(df):
     contador_viajes = dict()
@@ -134,6 +132,17 @@ def mostrar_colorbar(vmax, cmap, vmin=1):
         st.pyplot(fig, use_container_width=True)
 
 
+# Cargamos los df originales
+df_airports, df_airlines, df_routes = load_data()
+
+# Voy a empezar definiendo todos los objetos que habra en el sidebar
+st.sidebar.title("Dataframes a mostrar en la pantalla")
+
+# Checkboxes para saber que dataframes mostrar abajo
+list_df = [(df_airports, "df_airports"), (df_airlines, "df_airlines"), (df_routes, "df_routes"), df_ida_vuelta, ("df_ida_vuelta")]
+checkbox = dict()
+for df in list_df:
+    checkbox[df[1]] = st.sidebar.checkbox(df[1])
 
 def two_columns_sidebar(elem1, elem2):
     with st.sidebar:
@@ -161,55 +170,6 @@ def n_columns_sidebar(n_elems, list_elems):
 
     return res
 
-
-#---------------------------------------------------------------------------------------
-# Realización de calculos iniciales:
-# Cargamos los df originales
-df_airports, df_airlines, df_routes = load_data()
-
-combinaciones = list(itertools.product(["Latitude", "Longitude"], ["Source", "Destination"]))
-
-df_trips = df_routes.groupby(["Source airport", "Destination airport"]).size().reset_index(name="vuelos")
-df_trips["Journeys"] = df_trips["Source airport"] + "-" + df_trips["Destination airport"]
-
-
-df_ida_vuelta = num_vuelos_ida_vuelta(df_trips)
-df_ida_vuelta = unir_pos_geografica(df_ida_vuelta)
-
-
-# Establecemos los colores que usaremos para los arcos y dibujamos la colorbar
-v_max=df_ida_vuelta["Num vuelos"].max()
-cmap_type ="hot"
-color_func = get_color_function(v_max=v_max, cmap_type=cmap_type)
-
-
-df_ida_vuelta["color"] = df_ida_vuelta["Num vuelos"].apply(color_func)
-
-
-# Capa de arcos
-arc_layer = pdk.Layer(
-    "ArcLayer",
-    data=df_ida_vuelta,
-    get_source_position=["Source Longitude", "Source Latitude"],
-    get_target_position=["Destination Longitude", "Destination Latitude"],
-    get_source_color="color",
-    get_target_color="color",
-    pickable=True
-)
-
-
-
-# ---------------------------------------------------------------------------
-# Sidebar
-st.sidebar.title("Dataframes a mostrar en la pantalla")
-
-# Checkboxes para saber que dataframes mostrar abajo
-list_df = [(df_airports, "df_airports"), (df_airlines, "df_airlines"), (df_routes, "df_routes"), (df_ida_vuelta, "df_ida_vuelta")]
-checkbox = dict()
-for df in list_df:
-    checkbox[df[1]] = st.sidebar.checkbox(df[1])
-
-    
 st.sidebar.title("Filtrado")
 
 # Inicializamos lista de filtros si no existe
@@ -241,6 +201,14 @@ for i, filtro in enumerate(st.session_state.filtros):
     )
 
 
+def apply_filter():
+    pass
+
+
+
+
+apply_filter()
+
 
 
 #-----------------------------------------------------------------------------------------
@@ -249,22 +217,54 @@ for i, filtro in enumerate(st.session_state.filtros):
 # Dividimos la página principal en 3 columnas
 col1, col2, col3= st.columns([15, 60, 10])
 
+# Establecemos los colores que usaremos para los arcos y dibujamos la colorbar
+v_max=100
+cmap_type ="hot"
+color_func = get_color_function(v_max=v_max, cmap_type=cmap_type)
 mostrar_colorbar(v_max, cmap_type)
 
-# Mostrar en Streamlit
-initial_view_state = pdk.ViewState(
-    latitude=df_ida_vuelta["Source Latitude"].mean(),
-    longitude=df_ida_vuelta["Source Longitude"].mean(),
-    zoom=2
+
+
+# Simulación de tus datos de rutas
+df = pd.DataFrame([
+    {"from_lat": 40.4168, "from_lon": -3.7038, "to_lat": 48.8566, "to_lon": 2.3522, "width":30},  # Madrid → París
+    {"from_lat": 51.5074, "from_lon": -0.1278, "to_lat": 40.7128, "to_lon": -74.0060, "width": 1}, # Londres → NYC
+])
+df["color"] = df["width"].apply(color_func)
+
+
+combinaciones = list(itertools.product(["Latitude", "Longitude"], ["Source", "Destination"]))
+
+df_trips = df_routes.groupby(["Source airport", "Destination airport"]).size().reset_index(name="vuelos")
+df_trips["Journeys"] = df_trips["Source airport"] + "-" + df_trips["Destination airport"]
+
+
+df_ida_vuelta = num_vuelos_ida_vuelta(df_trips)
+df_ida_vuelta = unir_pos_geografica(df_ida_vuelta)
+
+df_ida_vuelta["color"] = df_ida_vuelta["Num vuelos"].apply(color_func)
+
+
+# Capa de arcos
+arc_layer = pdk.Layer(
+    "ArcLayer",
+    data=df_ida_vuelta,
+    get_source_position='[Source Longitude, Source Latitude]',
+    get_target_position='[Destination Longitude, Destination Latitude]',
+    get_source_color="color",
+    get_target_color="color",
+    pickable=True
 )
 
+
+# Mostrar en Streamlit
 with col2:
     st.pydeck_chart(pdk.Deck(
         layers=[arc_layer],
-        tooltip={"text": "Journeys"},
-        initial_view_state=initial_view_state,
+        tooltip={"text": "Vuelo"},
         height=400
     ))
+
 
 
 
@@ -272,4 +272,4 @@ for df in list_df:
     if checkbox[df[1]]:
         st.dataframe(df[0].head(20))
 
-st.write(v_max)
+
