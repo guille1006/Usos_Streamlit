@@ -4,3 +4,4 @@ pydeck
 matplotlib
 numpy
 itertools
+plotly
