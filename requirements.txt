@@ -3,5 +3,4 @@ pandas
 pydeck
 matplotlib
 numpy
-itertools
 plotly
