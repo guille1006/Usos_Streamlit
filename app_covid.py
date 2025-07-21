@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import itertools
 import gzip
+import plotly.express as px
+import plotly.graph_objects as go
 
 
 @st.cache_data
@@ -16,109 +18,9 @@ def load_data():
     -------
     - df con los datos
     """
-
-    # Usaré los datos del mes de marzo de 2020
-    file = "flightlist_20200301_20200331.csv.gz"
-
-    with gzip.open(file, 'rt') as f:
-        df = pd.read_csv(f)
-
-    # Voy a necesitar cambiar algunos valores para poder filtrar facilmente, uno de ellos será el nombre de los paises y 
-    # clasificarlos por contientes
-
-    # Guardo el dataset de los continentes
-    url_continents = "https://datahub.io/core/airport-codes/r/airport-codes.csv"
-    df_continents = pd.read_csv(url_continents)
-
-
-    # Elimino las columnas que no son necesarias
-    df_continents.drop(["ident", "name", "elevation_ft", "iso_region", "municipality", "gps_code", "local_code"], axis=1, inplace=True)
-
-    # Parece ser que donde pone NaN en verdad es NA
-    df_continents["continent"] = df_continents["continent"].fillna("NA")
-
-    # Elimino las filas que no tienen codigo ICAO
-    df_continents = df_continents[df_continents["icao_code"].notna()]
-
-    # Elimino las filas que no tienen codigo IATA
-    df_continents = df_continents[df_continents["iata_code"].notna()]
-
-    # Elimino aquellos que no sean aeropuertos
-    df_continents = df_continents[~df_continents["type"].isin(["heliport", "seaplane_base"])]
-
-    # Para renombrar los paises usare un dataframe de soporte
-    url_iso = "https://datahub.io/core/country-list/r/data.csv"
-    df_iso = pd.read_csv(url_iso)  
-
-    df_continents = df_continents.merge(df_iso, left_on='iso_country', right_on='Code', how='left')
-    df_continents = df_continents.rename(columns={'Name': 'country_name'}).drop(columns=['Code'])
-
-    # Tambien voy a renombrar los continentes para que sean mas amigables
-    continent_names = {
-        'AF': 'Africa',
-        'AN': 'Antarctica',
-        'AS': 'Asia',
-        'EU': 'Europe',
-        'NA': 'North America',
-        'OC': 'Oceania',
-        'SA': 'South America'
-    }
-    df_continents['continent'] = df_continents['continent'].replace(continent_names)
-
-
-
-    return df
-
-
-
-def get_color_function(v_max, cmap_type, v_min=1):
-    """
-    Devuelve una función que convierte un valor en un color según el cmap y la normalización.
-    
-    Parameters:
-    ----------
-    - v_max: valor máximo para normalización
-    - cmap_type: nombre del colormap
-    - v_min: valor mínimo para normalización (default 1)
-    
-    Returns:
-    -------
-    - func_color(valor): función que recibe un valor y devuelve el color RGB255
-    """
-    norm = plt.Normalize(vmin=v_min, vmax=v_max)
-    cmap = plt.get_cmap(cmap_type)
-    
-    def func_color(valor):
-        color_rgba = cmap(norm(int(valor)))  # color RGBA normalizado 0-1
-        color_rgb255 = [int(255*c) for c in color_rgba[:3]]  # color RGB 0-255
-        return color_rgb255
-    
-    return func_color
-
-
-def mostrar_colorbar(vmax, cmap, vmin=1):
-    """
-    Muestra una barra de color vertical en una aplicación Streamlit.
-
-    Parameters
-    ----------
-    - vmax : Valor máximo de la escala de colores
-    - cmap : Colormap a utilizar
-    - vmin : Valor mínimo de la escala de colores. Por defecto es 1
-
-    Returns
-    -------
-    None
-    """
-
-    fig, ax = plt.subplots(figsize=(0.10, 4))
-    norm = plt.Normalize(vmin=vmin, vmax=vmax)
-    cb = plt.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), cax=ax)
-    cb.set_label("Numero de vuelos")
-    
-    with col3:
-        st.pyplot(fig, use_container_width=True)
-
+    df = pd.read_csv("df.csv")
+    df_continents = pd.read_csv("df_continents.csv")
+    return df, df_continents
 
 
 def two_columns_sidebar(elem1, elem2):
@@ -147,26 +49,81 @@ def n_columns_sidebar(n_elems, list_elems):
 
     return res
 
-@st.cache_data
 def count_flights_per_day(df):
-    df["day"] = df["day"].apply(lambda x: x.split()[0].split("-")[2])
-    serie_count = df["day"].value_counts().sort_index()
-    return serie_count
+    df_count = pd.DataFrame()
+    df_count["num_flights"] = df["day"].value_counts().sort_index()
+    df_count["day"] = df_count.index
+    return df_count
+
+def filter_df_continent(df_continents, col, elem):
+    df_continents_filt =  df_continents[df_continents[col]==elem]
+    return df_continents_filt
+
+def filter_df(df, df_continents_filt):
+    df_filt = df[df["origin"].isin(df_continents_filt["icao_code"]) | df["destination"].isin(df_continents_filt["icao_code"])]
+    return df_filt
+
+def do_filter(col, elem, df_filtered, df_continents_filtered):
+    df_continents_filtered = filter_df_continent(df_continents_filtered, col, elem)
+    df_filt = filter_df(df_filtered, df_continents_filtered)
+    return df_filt, df_continents_filtered
+   
+def filter_day(df, type_filter, day):
+    if type_filter == "=":
+        df = df[df["day"]==day]
+
+    elif type_filter == "<":
+        df = df[df["day"]<day]
+
+    elif type_filter == ">":
+        df = df[df["day"]>day]
+
+    return df
+
+
+def graph_df_total(df):
+    df_total_count = count_flights_per_day(df)
+    fig = go.Figure()
+
+    fig.add_trace(
+    go.Scatter(
+        x=df_total_count["day"],
+        y=df_total_count["num_flights"],
+        mode="lines+markers",
+        hovertemplate=("day: %{x}<br> num_flights: %{y}<br>"),
+        name="Total"
+        )
+    )
+   
+    return fig
+
+def graph_add_line(df_add, fig, name):
+    fig.add_trace(
+        go.Scatter(
+            x=df_add["day"],
+            y=df_add["num_flights"],
+            mode="lines+markers",
+            hovertemplate=("day: %{x}<br> num_flights: %{y}<br>"),
+            name=name
+        )
+    )
+
+
 
 #---------------------------------------------------------------------------------------
 # Realización de calculos iniciales:
 # Cargamos los df originales
-df = load_data()
-serie_per_day = count_flights_per_day(df)
-fig, ax = plt.subplots()
-ax.plot(serie_per_day.index, serie_per_day.values, marker='o', linestyle="-", color='blue')
-ax.set_ylabel('Cantidad')
-ax.set_xlabel('Día')
-ax.set_title('Conteo de vuelos por día')
-plt.xticks(rotation=90 )
+df, df_continents = load_data()
+
+df_count = count_flights_per_day(df)
+fig_scatter = graph_df_total(df)
+
+for continent in df_continents["continent"].unique():
+    df_filtered, _ = do_filter("continent", continent, df, df_continents)
+    df_count = count_flights_per_day(df_filtered)
+    graph_add_line(df_count, fig_scatter, continent)
 
 
-st.pyplot(fig)
 
 
 
@@ -176,13 +133,25 @@ st.pyplot(fig)
 
 # ---------------------------------------------------------------------------
 # Sidebar
+
+# Cambiar el ancho de la sidebar usando CSS
+st.markdown("""
+    <style>
+        [data-testid="stSidebar"] {
+            min-width: 400px;
+            width: 400px;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 st.sidebar.title("Dataframes a mostrar en la pantalla")
 
 # Checkboxes para saber que dataframes mostrar abajo
-list_df = [(df, "df")]
+list_df = [(df, "df"), (df_continents, "df_continents")]
 checkbox = dict()
-for df in list_df:
-    checkbox[df[1]] = st.sidebar.checkbox(df[1])
+for dataframe in list_df:
+    checkbox[dataframe[1]] = st.sidebar.checkbox(dataframe[1])
+
 
     
 st.sidebar.title("Filtrado")
@@ -193,28 +162,66 @@ if "filtros" not in st.session_state:
 
 
 
-button_add_filter, button_filter = n_columns_sidebar(n_elems=2, 
+button_add_filter, button_filter, button_delete_filter = n_columns_sidebar(n_elems=3, 
     list_elems=[lambda: st.button("Añadir filtro"),
-                lambda: st.button("Realizar filtro")]
+                lambda: st.button("Realizar filtro"),
+                lambda: st.button("Borrar filtros")]
 )
 
 # Si el botón "Añadir filtro" fue presionado, activa el filtro
 if button_add_filter:
     # Añadir un filtro vacío (puedes personalizar valores por defecto)
-    st.session_state.filtros.append({"columna": None, "elemento": None})
+    st.session_state.filtros.append({"columna": None, "comparacion": None, "elemento": None})
+
+if button_delete_filter:
+    st.session_state.filtros = []
+
+
+st.sidebar.markdown("--------------------")
+
+
+col_filtrado = [""] + ["Continente", "Pais", "Día"]
+continent_filtrado = [""] + df_continents["continent"].unique()
+country_filtrado = df_continents["country_name"].unique()
+day_filtrado = df["day"].unique()
+
+select_col = {"Continente": continent_filtrado,
+              "Pais": country_filtrado,
+              "Día": day_filtrado}
 
 
 
-for i, filtro in enumerate(st.session_state.filtros):
-    col1, col2 = two_columns_sidebar(
-        elem1=lambda key=f"columna_{i}": st.selectbox(
-            "Elige una columna", ["1", "2", "3"], key=key
-        ),
-        elem2=lambda key=f"elemento_{i}": st.selectbox(
-            "Elige un elemento", ["A", "B", "C"], key=key
-        )
-    )
+for i, _ in enumerate(st.session_state.filtros):
+    columna_key = f"columna_{i}"
+    comparacion_key = f"comparacion_{i}"
+    elemento_key = f"elemento_{i}"
 
+    
+
+    st.sidebar.selectbox("Elige una columna", col_filtrado, key=columna_key)
+
+    if not st.session_state.get(columna_key):
+        break
+    # Solo mostramos el tipo de comparación si se eligió una columna
+    elif st.session_state.get(columna_key) == "Día":
+        st.sidebar.selectbox("Elige un tipo de comparación", ["", "=", "<", ">"], key=comparacion_key)
+
+
+        if not st.session_state.get(comparacion_key):
+            break
+        # Solo mostramos el valor si se eligió la comparación
+        elif st.session_state.get(comparacion_key):
+            col_seleccionada = st.session_state.get(columna_key)
+            opciones = select_col.get(col_seleccionada, [])
+            st.sidebar.selectbox("Elige un valor", opciones, key=elemento_key)
+
+    else: 
+        comparacion_key=None
+        col_seleccionada = st.session_state.get(columna_key)
+        opciones = select_col.get(col_seleccionada, [])
+        st.sidebar.selectbox("Elige un valor", opciones, key=elemento_key)
+
+    st.sidebar.markdown("--------------------")
 
 
 
