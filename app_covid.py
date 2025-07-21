@@ -53,7 +53,15 @@ def count_flights_per_day(df):
     df_count = pd.DataFrame()
     df_count["num_flights"] = df["day"].value_counts().sort_index()
     df_count["day"] = df_count.index
+
     return df_count
+
+def count_flights_by_country_origin(df):
+    df_count = pd.DataFrame()
+    df_count["num_flights"] = df["origin"].value_counts().reset_index()
+    df_count.columns = ["origin", "num_flights"]
+    df_merge = pd.merge(df_count, df_continent, left_on="origin", right_on="icao_code", how="left")
+
 
 def filter_df_continent(df_continents, col, elem):
     df_continents_filt =  df_continents[df_continents[col]==elem]
@@ -81,7 +89,7 @@ def filter_day(df, type_filter, day):
     return df
 
 
-def graph_df_total(df):
+def graph_df_total_line(df):
     df_total_count = count_flights_per_day(df)
     fig = go.Figure()
 
@@ -110,25 +118,37 @@ def graph_add_line(df_add, fig, name):
 
 
 
+def graph_line(df):
+    df_count = count_flights_per_day(df)
+    fig_scatter = graph_df_total_line(df)
+
+    for continent in df_continents["continent"].unique():
+        df_filtered, _ = do_filter("continent", continent, df, df_continents)
+        df_count = count_flights_per_day(df_filtered)
+        graph_add_line(df_count, fig_scatter, continent)
+
+    # Una funcion adicional que me ha salido al usar un elemento "or" a la hora de filtrar, es que te muestra 
+    # tanto los vuelos de ida o vuelata del contiente filtrada como los vuelos de ida/vuelta hacia ese contienente
+
+    return fig_scatter
+
+
+def mapmundi(df):
+    fig = px.choropleth(
+    df,
+    locations="country_name",
+    locationmode="country_names",  
+    color="color",
+    hover_name="country_name",   
+    hover_data={"color": True} , 
+    color_continuous_scale="Blues")
+
+    fig.show()
+
 #---------------------------------------------------------------------------------------
 # Realización de calculos iniciales:
 # Cargamos los df originales
 df, df_continents = load_data()
-
-df_count = count_flights_per_day(df)
-fig_scatter = graph_df_total(df)
-
-for continent in df_continents["continent"].unique():
-    df_filtered, _ = do_filter("continent", continent, df, df_continents)
-    df_count = count_flights_per_day(df_filtered)
-    graph_add_line(df_count, fig_scatter, continent)
-
-
-
-
-
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -171,7 +191,7 @@ button_add_filter, button_filter, button_delete_filter = n_columns_sidebar(n_ele
 # Si el botón "Añadir filtro" fue presionado, activa el filtro
 if button_add_filter:
     # Añadir un filtro vacío (puedes personalizar valores por defecto)
-    st.session_state.filtros.append({"columna": None, "comparacion": None, "elemento": None})
+    st.session_state.filtros.append({"columna": None, "comparacion": None, "valor": None})
 
 if button_delete_filter:
     st.session_state.filtros = []
@@ -191,20 +211,20 @@ select_col = {"Continente": continent_filtrado,
 
 
 
-for i, _ in enumerate(st.session_state.filtros):
+for i, diccionary in enumerate(st.session_state.filtros):
     columna_key = f"columna_{i}"
     comparacion_key = f"comparacion_{i}"
     elemento_key = f"elemento_{i}"
 
     
 
-    st.sidebar.selectbox("Elige una columna", col_filtrado, key=columna_key)
+    diccionary["columna"] = st.sidebar.selectbox("Elige una columna", col_filtrado, key=columna_key)
 
     if not st.session_state.get(columna_key):
         break
     # Solo mostramos el tipo de comparación si se eligió una columna
     elif st.session_state.get(columna_key) == "Día":
-        st.sidebar.selectbox("Elige un tipo de comparación", ["", "=", "<", ">"], key=comparacion_key)
+        diccionary["comparacion"] = st.sidebar.selectbox("Elige un tipo de comparación", ["", "=", "<", ">"], key=comparacion_key)
 
 
         if not st.session_state.get(comparacion_key):
@@ -213,17 +233,27 @@ for i, _ in enumerate(st.session_state.filtros):
         elif st.session_state.get(comparacion_key):
             col_seleccionada = st.session_state.get(columna_key)
             opciones = select_col.get(col_seleccionada, [])
-            st.sidebar.selectbox("Elige un valor", opciones, key=elemento_key)
+            diccionary["valor"] = st.sidebar.selectbox("Elige un valor", opciones, key=elemento_key)
 
     else: 
         comparacion_key=None
         col_seleccionada = st.session_state.get(columna_key)
         opciones = select_col.get(col_seleccionada, [])
-        st.sidebar.selectbox("Elige un valor", opciones, key=elemento_key)
+        diccionary["valor"] = st.sidebar.selectbox("Elige un valor", opciones, key=elemento_key)
 
     st.sidebar.markdown("--------------------")
 
+if button_filter:
 
+    for i, elem in enumerate(st.session_state.filtros):
+        if elem["columna"] == "Día":
+            df = filter_day(df, elem["comparacion"], elem["valor"])
+        
+        elif elem["columna"] == "Pais":
+            df, df_continent = do_filter("country_name", elem["valor"], df, df_continents)
+
+        elif elem["columna"] == "Continente":
+            df, df_continent = do_filter("continent", elem["valor"], df, df_continents)
 
 #-----------------------------------------------------------------------------------------
 # Pagina principal
@@ -231,11 +261,14 @@ for i, _ in enumerate(st.session_state.filtros):
 # Dividimos la página principal en 3 columnas
 col1, col2, col3= st.columns([15, 60, 10])
 
+with col2:
+    graphic = graph_line(df)
+    st.plotly_chart(graphic)
 
 
 
 
 for df in list_df:
     if checkbox[df[1]]:
-        st.dataframe(df[0].head(20))
+        st.dataframe(df[0])
 
