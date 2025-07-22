@@ -439,7 +439,7 @@ if not st.session_state.intro:
         st.markdown("## ✈️ Visualización de Vuelos")
     with col2:
         st.write("")
-        siguiente = st.button("Siguiente", type="primary", key="1")
+        siguiente = st.button("Siguiente", type="primary", key="1", help="Pulsa dos veces")
 
     
     st.markdown("""
@@ -482,7 +482,7 @@ if not st.session_state.intro:
         El mapa coroplético permite visualizar la distribución geográfica de los vuelos a nivel país, coloreando cada territorio en función del número de vuelos que han llegado o partido desde él. Esta visualización facilita una interpretación clara del impacto del tráfico aéreo por región.
         """)
 
-    siguiente2 = st.button("Siguiente", type="primary", key="2")
+    siguiente2 = st.button("Siguiente", type="primary", key="2", help="Pulsa dos veces")
 
     if siguiente or siguiente2:
         st.session_state.intro = True
