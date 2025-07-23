@@ -225,6 +225,12 @@ def graph_df_total_line(df):
         name="Total"
         )
     )
+
+    fig.update_layout(
+        xaxis_title="Día",
+        yaxis_title="Número de vuelos",
+        title="Vuelos por día"
+    )
    
     return fig
 
